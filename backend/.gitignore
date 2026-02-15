@@ -1,0 +1,12 @@
+node_modules/
+dist/
+uploads/
+data/
+*.sqlite
+ymh.sqlite
+vision-usage.json
+.env
+google-credentials.json
+vision-credentials.json
+*.log
+.DS_Store
