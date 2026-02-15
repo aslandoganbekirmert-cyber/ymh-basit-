@@ -1,0 +1,15 @@
+node_modules
+.expo
+.git
+.gitignore
+npm-debug.log
+yarn-error.log
+android
+ios
+dist
+web-build
+*.apk
+*.aab
+*.ipa
+backend
+ymh-basit

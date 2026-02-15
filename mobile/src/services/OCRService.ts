@@ -1,8 +1,8 @@
 import { MaterialType, Unit } from '../types';
 import * as FileSystem from 'expo-file-system/legacy';
+import { API_BASE_URL } from '../config';
 
 // OCR is now server-side! Mobile sends photo to backend and gets parsed data back.
-const API_BASE_URL = 'http://192.168.1.101:3000/api/v1'; // Mac's local IP for device testing
 
 interface OCRResult {
     rawText: string;

@@ -5,6 +5,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { MaterialType, Unit, DeliveryInput } from '../types';
 import { DatabaseService } from '../services/Database';
 import { SyncService } from '../services/SyncService';
+import { API_BASE_URL } from '../config';
 
 // Custom Dropdown Component to avoid external dependencies
 const CustomPicker = ({ label, value, options, onSelect }: any) => {
@@ -43,8 +44,6 @@ const CustomPicker = ({ label, value, options, onSelect }: any) => {
         </View>
     );
 };
-
-const API_BASE_URL = 'http://192.168.1.101:3000/api/v1';
 
 export default function ConfirmationScreen() {
     const route = useRoute();

@@ -1,8 +1,8 @@
 import { DatabaseService } from './Database';
 import { Delivery } from '../types';
 import NetInfo from '@react-native-community/netinfo';
+import { API_BASE_URL } from '../config';
 
-const API_BASE_URL = 'http://192.168.1.101:3000/api/v1'; // Mac's local IP for device testing on device
 const BATCH_SIZE = 10;
 
 // Background fetch removed - not supported in Expo Go.
