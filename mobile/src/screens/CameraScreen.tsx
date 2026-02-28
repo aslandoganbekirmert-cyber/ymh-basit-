@@ -9,13 +9,18 @@ import { OCRService } from '../services/OCRService';
 import { PinchGestureHandler, State } from 'react-native-gesture-handler';
 import { useRoute } from '@react-navigation/native';
 
-const DEFAULT_ZOOM = 0;
+const ZOOM_LEVELS = {
+    '0.5x': 0,
+    '1x': 0.05,
+    '2x': 0.1,
+};
+const DEFAULT_ZOOM = ZOOM_LEVELS['1x'];
 
 export default function CameraScreen({ navigation }: any) {
     const [permission, requestPermission] = useCameraPermissions();
     const [photo, setPhoto] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [zoom, setZoom] = useState(0);
+    const [zoom, setZoom] = useState(DEFAULT_ZOOM);
     const [baseZoom, setBaseZoom] = useState(DEFAULT_ZOOM);
     const [currentProject, setCurrentProject] = useState<{ id: string, name: string } | null>(null);
     const [userLocation, setUserLocation] = useState<{ latitude: number, longitude: number } | null>(null);
@@ -237,6 +242,21 @@ export default function CameraScreen({ navigation }: any) {
 
                         {/* Bottom Controls */}
                         <View style={styles.bottomBar}>
+                            {/* Zoom Controls */}
+                            <View style={styles.zoomControls}>
+                                {Object.entries(ZOOM_LEVELS).map(([label, value]) => (
+                                    <TouchableOpacity
+                                        key={label}
+                                        style={[styles.zoomBtn, Math.abs(zoom - value) < 0.01 && styles.zoomBtnActive]}
+                                        onPress={() => setZoom(value)}
+                                    >
+                                        <Text style={[styles.zoomBtnText, Math.abs(zoom - value) < 0.01 && styles.zoomBtnTextActive]}>
+                                            {label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
                             {/* Capture Row: Gallery + Shutter */}
                             <View style={styles.captureRow}>
                                 {/* Gallery Button */}
@@ -293,6 +313,36 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 16,
     },
+    // Zoom Controls
+    zoomControls: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 15,
+        marginBottom: 20,
+    },
+    zoomBtn: {
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
+    zoomBtnActive: {
+        backgroundColor: '#FFD700',
+        borderColor: '#FFD700',
+    },
+    zoomBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    zoomBtnTextActive: {
+        color: '#000',
+    },
+
     // Bottom Bar
     bottomBar: {
         position: 'absolute',

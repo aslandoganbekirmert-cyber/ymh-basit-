@@ -38,57 +38,29 @@ jobs:
           cd ios
           pod install
 
-      - name: 🏗️ Build iOS (Simulator - unsigned)
+      - name: 🏗️ Build iOS (Unsigned IPA for Device)
         run: |
           cd ios
-          xcodebuild \
+          xcodebuild clean build \
             -workspace ymhsahamobile.xcworkspace \
             -scheme ymhsahamobile \
             -configuration Release \
-            -sdk iphonesimulator \
+            -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_IDENTITY="" \
             -quiet
-
-      # For a signed IPA (App Store / device install), you need:
-      # 1. Apple Developer certificate (p12) stored in GitHub secrets
-      # 2. Provisioning profile stored in GitHub secrets
-      # 3. Additional signing steps (uncomment below when ready)
-
-      # - name: 🔑 Import signing certificate
-      #   env:
-      #     CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
-      #     CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-      #     PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
-      #   run: |
-      #     # Decode and import certificate
-      #     echo $CERTIFICATE_P12 | base64 --decode > cert.p12
-      #     security create-keychain -p "" build.keychain
-      #     security import cert.p12 -k build.keychain -P $CERTIFICATE_PASSWORD -T /usr/bin/codesign
-      #     security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
-      #     # Install provisioning profile
-      #     mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-      #     echo $PROVISIONING_PROFILE | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
-
-      # - name: 🏗️ Build signed IPA
-      #   run: |
-      #     cd ios
-      #     xcodebuild \
-      #       -workspace ymhsahamobile.xcworkspace \
-      #       -scheme ymhsahamobile \
-      #       -configuration Release \
-      #       -sdk iphoneos \
-      #       -archivePath build/ymhsaha.xcarchive \
-      #       archive
-      #     xcodebuild \
-      #       -exportArchive \
-      #       -archivePath build/ymhsaha.xcarchive \
-      #       -exportPath build/ipa \
-      #       -exportOptionsPlist ExportOptions.plist
+          
+          echo "Packaging IPA..."
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/ymhsahamobile.app Payload/
+          zip -qr ymh-saha-ios.ipa Payload
+          rm -rf Payload
 
       - name: 📤 Upload Build
         uses: actions/upload-artifact@v4
         with:
           name: ymh-saha-ios-build
-          path: mobile/ios/build/
+          path: mobile/ios/ymh-saha-ios.ipa
           retention-days: 30
