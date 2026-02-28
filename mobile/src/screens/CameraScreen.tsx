@@ -1,3 +1,4 @@
+// Trigger Fast Refresh
 import React, { useState, useRef, useEffect } from 'react';
 import * as Location from 'expo-location';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, Platform, Dimensions } from 'react-native';
@@ -6,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { OCRService } from '../services/OCRService';
+import { API_BASE_URL } from '../config';
 import { PinchGestureHandler, State } from 'react-native-gesture-handler';
 import { useRoute } from '@react-navigation/native';
 
@@ -32,7 +34,6 @@ export default function CameraScreen({ navigation }: any) {
             setCurrentProject(route.params.lastSelectedProject);
         }
     }, [route.params?.lastSelectedProject]);
-    const API_BASE_URL = 'http://192.168.1.101:3000/api/v1';
 
     const getLocationAndProject = async () => {
         console.log('[DEBUG] getLocationAndProject called');
@@ -223,6 +224,7 @@ export default function CameraScreen({ navigation }: any) {
                 >
                     <View style={{ flex: 1 }}>
                         <CameraView
+                            key={activeLensKey}
                             style={styles.camera}
                             facing="back"
                             ref={cameraRef}
