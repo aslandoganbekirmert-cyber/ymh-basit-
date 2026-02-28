@@ -15,7 +15,7 @@ export default function CameraScreen({ navigation }: any) {
     const [permission, requestPermission] = useCameraPermissions();
     const [photo, setPhoto] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+    const [zoom, setZoom] = useState(0);
     const [baseZoom, setBaseZoom] = useState(DEFAULT_ZOOM);
     const [currentProject, setCurrentProject] = useState<{ id: string, name: string } | null>(null);
     const [userLocation, setUserLocation] = useState<{ latitude: number, longitude: number } | null>(null);
