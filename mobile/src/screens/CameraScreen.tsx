@@ -94,7 +94,7 @@ export default function CameraScreen({ navigation }: any) {
     const handleCameraReady = async () => {
         if (cameraRef.current && Platform.OS === 'ios') {
             try {
-                const lenses = await cameraRef.current.getAvailableLenses();
+                const lenses = await cameraRef.current.getAvailableLensesAsync();
                 console.log('[DEBUG] Available Device Lenses (Localized):', lenses);
                 setAvailableLenses(lenses);
 
