@@ -15,6 +15,27 @@ interface OCRResult {
     confidence: number;
 }
 
+// Helper: fetch with timeout
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 30000): Promise<Response> {
+    return new Promise((resolve, reject) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error(`Request timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        fetch(url, { ...options, signal: controller.signal })
+            .then(response => {
+                clearTimeout(timer);
+                resolve(response);
+            })
+            .catch(err => {
+                clearTimeout(timer);
+                reject(err);
+            });
+    });
+}
+
 export class OCRService {
     /**
      * Send photo to backend OCR endpoint for server-side analysis.
@@ -30,13 +51,14 @@ export class OCRService {
                 type: 'image/jpeg',
             } as any);
 
-            const response = await fetch(`${API_BASE_URL}/ocr/analyze`, {
+            // IMPORTANT: Do NOT manually set Content-Type header for FormData!
+            // React Native's fetch will automatically set it with the correct
+            // multipart boundary. Manually setting it strips the boundary string.
+            const response = await fetchWithTimeout(`${API_BASE_URL}/ocr/analyze`, {
                 method: 'POST',
                 body: formData,
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
+                // No Content-Type header — let fetch set it automatically
+            }, 30000);
 
             if (!response.ok) {
                 console.warn('OCR API Error:', response.status);

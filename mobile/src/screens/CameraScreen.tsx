@@ -13,6 +13,38 @@ import { useRoute } from '@react-navigation/native';
 
 const PRESETS = ['0.5x', '1x', '2x'];
 
+// Helper: fetch with timeout + retry
+async function fetchWithRetry(
+    url: string,
+    options: RequestInit = {},
+    retries = 2,
+    timeoutMs = 10000
+): Promise<Response> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal,
+            });
+            clearTimeout(timer);
+            return response;
+        } catch (err: any) {
+            lastError = err;
+            console.warn(`[Network] Attempt ${attempt}/${retries} failed for ${url}: ${err?.message}`);
+            if (attempt < retries) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+    }
+
+    throw lastError || new Error('Network request failed after retries');
+}
+
 export default function CameraScreen({ navigation }: any) {
     const [permission, requestPermission] = useCameraPermissions();
     const [photo, setPhoto] = useState<string | null>(null);
@@ -47,8 +79,9 @@ export default function CameraScreen({ navigation }: any) {
 
             // 1. Try nearest project (within threshold)
             try {
-                console.log('[DEBUG] Fetching nearest from:', `${API_BASE_URL}/projects/nearest?lat=${latitude}&lng=${longitude}`);
-                const response = await fetch(`${API_BASE_URL}/projects/nearest?lat=${latitude}&lng=${longitude}`);
+                const url = `${API_BASE_URL}/projects/nearest?lat=${latitude}&lng=${longitude}`;
+                console.log('[DEBUG] Fetching nearest from:', url);
+                const response = await fetchWithRetry(url);
                 console.log('[DEBUG] Nearest response status:', response.status);
                 if (response.ok) {
                     const project = await response.json();
@@ -66,7 +99,7 @@ export default function CameraScreen({ navigation }: any) {
             // 2. Fallback: fetch all projects and pick first one
             try {
                 console.log('[DEBUG] Fetching all projects...');
-                const response = await fetch(`${API_BASE_URL}/projects`);
+                const response = await fetchWithRetry(`${API_BASE_URL}/projects`);
                 console.log('[DEBUG] All projects response status:', response.status);
                 if (response.ok) {
                     const allProjects = await response.json();

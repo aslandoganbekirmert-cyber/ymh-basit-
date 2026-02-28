@@ -7,6 +7,38 @@ import { DatabaseService } from '../services/Database';
 import { SyncService } from '../services/SyncService';
 import { API_BASE_URL } from '../config';
 
+// Helper: fetch with timeout + retry
+async function fetchWithRetry(
+    url: string,
+    options: RequestInit = {},
+    retries = 3,
+    timeoutMs = 15000
+): Promise<Response> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal,
+            });
+            clearTimeout(timer);
+            return response;
+        } catch (err: any) {
+            lastError = err;
+            console.warn(`[Network] Attempt ${attempt}/${retries} failed for ${url}: ${err?.message}`);
+            if (attempt < retries) {
+                await new Promise(r => setTimeout(r, 1000)); // 1 saniye bekle
+            }
+        }
+    }
+
+    throw lastError || new Error('Network request failed after retries');
+}
+
 // Custom Dropdown Component to avoid external dependencies
 const CustomPicker = ({ label, value, options, onSelect }: any) => {
     const [modalVisible, setModalVisible] = useState(false);
@@ -66,6 +98,7 @@ export default function ConfirmationScreen() {
     const [projectModalVisible, setProjectModalVisible] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
     const [isCreatingProject, setIsCreatingProject] = useState(false);
+    const [networkError, setNetworkError] = useState<string | null>(null);
 
     useEffect(() => {
         // If no project passed, or user wants to verify, fetch projects used for selection
@@ -76,14 +109,26 @@ export default function ConfirmationScreen() {
     }, []);
 
     const fetchProjects = async () => {
+        setNetworkError(null);
         try {
-            const res = await fetch(`${API_BASE_URL}/projects`);
+            console.log('[Network] Fetching projects from:', `${API_BASE_URL}/projects`);
+            const res = await fetchWithRetry(`${API_BASE_URL}/projects`);
             if (res.ok) {
                 const data = await res.json();
+                console.log('[Network] Projects loaded:', data.length);
                 setProjects(data);
+            } else {
+                console.warn('[Network] Projects response not OK:', res.status);
+                setNetworkError(`Sunucu hatası: ${res.status}`);
             }
-        } catch (e) {
-            console.warn('Failed to fetch projects', e);
+        } catch (e: any) {
+            console.error('[Network] fetchProjects FAILED:', JSON.stringify({
+                message: e?.message,
+                name: e?.name,
+                type: e?.type,
+                stack: e?.stack?.substring(0, 300)
+            }));
+            setNetworkError(`Bağlantı hatası: ${e?.message}`);
         }
     };
 
@@ -93,8 +138,10 @@ export default function ConfirmationScreen() {
             return;
         }
         setIsCreatingProject(true);
+        setNetworkError(null);
         try {
-            const res = await fetch(`${API_BASE_URL}/projects`, {
+            console.log('[Network] Creating project:', newProjectName, 'URL:', `${API_BASE_URL}/projects`);
+            const res = await fetchWithRetry(`${API_BASE_URL}/projects`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -106,20 +153,24 @@ export default function ConfirmationScreen() {
 
             if (res.ok) {
                 const newProject = await res.json();
+                console.log('[Network] Project created:', newProject.name);
                 setSelectedProject(newProject);
                 setProjectModalVisible(false);
                 setNewProjectName('');
             } else {
-                Alert.alert('Hata', 'Proje oluşturulamadı.');
+                const errorText = await res.text().catch(() => 'Unknown');
+                console.error('[Network] Create project failed:', res.status, errorText);
+                Alert.alert('Hata', `Proje oluşturulamadı. (${res.status})`);
             }
         } catch (e: any) {
-            console.error('[DEBUG] createNewProject FULL ERROR:', JSON.stringify({
+            console.error('[Network] createNewProject FULL ERROR:', JSON.stringify({
                 message: e?.message,
                 name: e?.name,
                 url: `${API_BASE_URL}/projects`,
-                stack: e?.stack?.substring(0, 200)
+                stack: e?.stack?.substring(0, 300)
             }));
-            Alert.alert('Hata', `Bağlantı hatası: ${e?.message || 'Bilinmeyen hata'}`);
+            setNetworkError(`Bağlantı hatası: ${e?.message}`);
+            Alert.alert('Bağlantı Hatası', `Sunucuya bağlanılamıyor.\n\nDetay: ${e?.message}\n\nSunucu: ${API_BASE_URL}\n\nLütfen internet bağlantınızı kontrol edin.`);
         } finally {
             setIsCreatingProject(false);
         }
@@ -157,8 +208,11 @@ export default function ConfirmationScreen() {
             // 1. Fast duplicate check (lightweight GET, ~50ms)
             if (receiptNo && plate) {
                 try {
-                    const checkRes = await fetch(
-                        `${API_BASE_URL}/transactions/check-duplicate?ticket=${encodeURIComponent(receiptNo)}&plate=${encodeURIComponent(plate)}`
+                    const checkRes = await fetchWithRetry(
+                        `${API_BASE_URL}/transactions/check-duplicate?ticket=${encodeURIComponent(receiptNo)}&plate=${encodeURIComponent(plate)}`,
+                        {},
+                        1, // sadece 1 deneme - offline ise atla
+                        5000
                     );
                     if (checkRes.ok) {
                         const { exists } = await checkRes.json();
@@ -252,6 +306,20 @@ export default function ConfirmationScreen() {
                                 </View>
 
                                 <Text style={{ color: '#aaa', marginBottom: 10 }}>Mevcut Projeler:</Text>
+
+                                {/* Network Error Banner */}
+                                {networkError && (
+                                    <View style={{ backgroundColor: '#331111', padding: 12, borderRadius: 8, marginBottom: 10 }}>
+                                        <Text style={{ color: '#ff6666', fontSize: 13, marginBottom: 8 }}>{networkError}</Text>
+                                        <Text style={{ color: '#999', fontSize: 11, marginBottom: 8 }}>Sunucu: {API_BASE_URL}</Text>
+                                        <TouchableOpacity
+                                            style={{ backgroundColor: '#FFD700', borderRadius: 6, padding: 8, alignItems: 'center' }}
+                                            onPress={fetchProjects}
+                                        >
+                                            <Text style={{ color: '#000', fontWeight: 'bold' }}>Tekrar Dene</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
 
                                 <FlatList
                                     data={projects}

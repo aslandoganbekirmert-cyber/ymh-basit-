@@ -66,12 +66,12 @@ export class SyncService {
             } as any);
         }
 
+        // IMPORTANT: Do NOT manually set Content-Type for FormData!
+        // React Native's fetch automatically sets the correct multipart boundary.
         const response = await fetch(`${API_BASE_URL}/transactions`, {
             method: 'POST',
             body: formData,
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+            // No Content-Type header — let fetch set it automatically
         });
 
         if (!response.ok) {
