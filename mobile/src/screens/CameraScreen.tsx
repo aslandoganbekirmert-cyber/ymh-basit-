@@ -91,17 +91,30 @@ export default function CameraScreen({ navigation }: any) {
         getLocationAndProject();
     }, [permission]);
 
+    // Helper: check if a lens name is a VIRTUAL composite camera (not a physical single lens)
+    const isVirtualCamera = (name: string): boolean => {
+        const lower = name.toLowerCase();
+        return lower.includes('dual') || lower.includes('triple') || lower.includes('çift') || lower.includes('üçlü');
+    };
+
     const handleCameraReady = async () => {
         if (cameraRef.current && Platform.OS === 'ios') {
             try {
                 const lenses = await cameraRef.current.getAvailableLensesAsync();
-                console.log('[DEBUG] Available Device Lenses (Localized):', lenses);
-                setAvailableLenses(lenses);
+                console.log('[DEBUG] ALL Available Lenses:', JSON.stringify(lenses));
 
-                // Auto-select 1x lens on startup
-                const wideLens = lenses.find(l => (l.toLowerCase().includes('geniş') || l.toLowerCase().includes('wide') || l.toLowerCase().includes('ana') || l.toLowerCase().includes('main')) && !l.toLowerCase().includes('ultra'));
+                // Filter to only physical single-lens cameras
+                const physicalLenses = lenses.filter((l: string) => !isVirtualCamera(l));
+                console.log('[DEBUG] Physical Lenses Only:', JSON.stringify(physicalLenses));
+                setAvailableLenses(physicalLenses);
+
+                // Auto-select 1x physical wide lens on startup
+                const wideLens = physicalLenses.find((l: string) => {
+                    const lower = l.toLowerCase();
+                    return (lower.includes('wide') || lower.includes('geniş') || lower === 'back camera') && !lower.includes('ultra');
+                });
                 if (wideLens && !activeLensName) {
-                    console.log('[DEBUG] Auto-selected 1x lens:', wideLens);
+                    console.log('[DEBUG] Auto-selected 1x PHYSICAL lens:', wideLens);
                     setActiveLensName(wideLens);
                 }
             } catch (error) {
@@ -115,23 +128,34 @@ export default function CameraScreen({ navigation }: any) {
 
         if (Platform.OS === 'ios') {
             let desiredLens: string | undefined;
+
             if (preset === '0.5x') {
-                desiredLens = availableLenses.find(l => l.toLowerCase().includes('ultra'));
+                // Find the physical ultra-wide lens
+                desiredLens = availableLenses.find((l: string) => l.toLowerCase().includes('ultra'));
             } else if (preset === '1x') {
-                desiredLens = availableLenses.find(l => (l.toLowerCase().includes('geniş') || l.toLowerCase().includes('wide') || l.toLowerCase().includes('ana')) && !l.toLowerCase().includes('ultra'));
+                // Find the physical wide-angle lens (NOT ultra, NOT virtual dual/triple)
+                desiredLens = availableLenses.find((l: string) => {
+                    const lower = l.toLowerCase();
+                    return (lower.includes('wide') || lower.includes('geniş') || lower === 'back camera') && !lower.includes('ultra');
+                });
             } else if (preset === '2x') {
-                // Try telephoto first, fallback to wide
-                desiredLens = availableLenses.find(l => l.toLowerCase().includes('tele')) || availableLenses.find(l => (l.toLowerCase().includes('geniş') || l.toLowerCase().includes('wide')) && !l.toLowerCase().includes('ultra'));
+                // Try telephoto first, then fall back to wide + digital zoom
+                desiredLens = availableLenses.find((l: string) => l.toLowerCase().includes('tele'));
+                if (!desiredLens) {
+                    desiredLens = availableLenses.find((l: string) => {
+                        const lower = l.toLowerCase();
+                        return (lower.includes('wide') || lower.includes('geniş') || lower === 'back camera') && !lower.includes('ultra');
+                    });
+                }
             }
 
             if (desiredLens) {
-                console.log('[DEBUG] Switching physical lens to:', desiredLens);
+                console.log('[DEBUG] Switching to PHYSICAL lens:', desiredLens, 'for preset:', preset);
                 setActiveLensName(desiredLens);
-                // Reset optical zoom multiplier when we switch lenses
                 setZoom(preset === '2x' && !desiredLens.toLowerCase().includes('tele') ? 0.05 : 0);
                 setBaseZoom(preset === '2x' && !desiredLens.toLowerCase().includes('tele') ? 0.05 : 0);
             } else {
-                // Fallback to digital zoom if specific lens string not found
+                console.log('[DEBUG] No matching physical lens found, using digital zoom for:', preset);
                 let z = 0;
                 if (preset === '1x') z = 0.02;
                 if (preset === '2x') z = 0.05;
@@ -139,7 +163,6 @@ export default function CameraScreen({ navigation }: any) {
                 setBaseZoom(z);
             }
         } else {
-            // Android digital zoom scale
             let z = 0;
             if (preset === '1x') z = 0.02;
             if (preset === '2x') z = 0.05;

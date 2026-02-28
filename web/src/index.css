@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  /* Renkler */
+  --color-background: #000000;
+  --color-foreground: #FAFAFA;
+
+  --color-primary: #FFD700;
+  --color-primary-foreground: #000000;
+
+  --color-card: #18181B;
+  /* zinc-900 */
+  --color-card-foreground: #FAFAFA;
+
+  --color-popover: #18181B;
+  --color-popover-foreground: #FAFAFA;
+
+  --color-secondary: #27272A;
+  /* zinc-800 */
+  --color-secondary-foreground: #FAFAFA;
+
+  --color-muted: #27272A;
+  --color-muted-foreground: #A1A1AA;
+  /* zinc-400 */
+
+  --color-accent: #27272A;
+  --color-accent-foreground: #FAFAFA;
+
+  --color-destructive: #7F1D1D;
+  /* red-900 */
+  --color-destructive-foreground: #FAFAFA;
+
+  --color-border: #27272A;
+  --color-input: #27272A;
+  --color-ring: #FFD700;
+
+  /* Font */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+/* Base Styles */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
