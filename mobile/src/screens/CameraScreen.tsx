@@ -11,19 +11,17 @@ import { API_BASE_URL } from '../config';
 import { PinchGestureHandler, State } from 'react-native-gesture-handler';
 import { useRoute } from '@react-navigation/native';
 
-const LENS_PRESETS = {
-    '0.5x': { zoom: 0, lens: 'builtInUltraWideCamera' },
-    '1x': { zoom: 0, lens: 'builtInWideAngleCamera' },
-    '2x': { zoom: Platform.OS === 'ios' ? 0.02 : 0.1, lens: 'builtInWideAngleCamera' },
-};
+const PRESETS = ['0.5x', '1x', '2x'];
 
 export default function CameraScreen({ navigation }: any) {
     const [permission, requestPermission] = useCameraPermissions();
     const [photo, setPhoto] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [activeLensKey, setActiveLensKey] = useState<keyof typeof LENS_PRESETS>('1x');
-    const [zoom, setZoom] = useState(LENS_PRESETS['1x'].zoom);
-    const [baseZoom, setBaseZoom] = useState(LENS_PRESETS['1x'].zoom);
+    const [zoom, setZoom] = useState(0);
+    const [baseZoom, setBaseZoom] = useState(0);
+    const [activePreset, setActivePreset] = useState<string>('1x');
+    const [activeLensName, setActiveLensName] = useState<string | undefined>(undefined);
+    const [availableLenses, setAvailableLenses] = useState<string[]>([]);
     const [currentProject, setCurrentProject] = useState<{ id: string, name: string } | null>(null);
     const [userLocation, setUserLocation] = useState<{ latitude: number, longitude: number } | null>(null);
     const cameraRef = useRef<any>(null);
@@ -92,6 +90,63 @@ export default function CameraScreen({ navigation }: any) {
         }
         getLocationAndProject();
     }, [permission]);
+
+    const handleCameraReady = async () => {
+        if (cameraRef.current && Platform.OS === 'ios') {
+            try {
+                const lenses = await cameraRef.current.getAvailableLenses();
+                console.log('[DEBUG] Available Device Lenses (Localized):', lenses);
+                setAvailableLenses(lenses);
+
+                // Auto-select 1x lens on startup
+                const wideLens = lenses.find(l => (l.toLowerCase().includes('geniş') || l.toLowerCase().includes('wide') || l.toLowerCase().includes('ana') || l.toLowerCase().includes('main')) && !l.toLowerCase().includes('ultra'));
+                if (wideLens && !activeLensName) {
+                    console.log('[DEBUG] Auto-selected 1x lens:', wideLens);
+                    setActiveLensName(wideLens);
+                }
+            } catch (error) {
+                console.error('[DEBUG] Failed to get available lenses:', error);
+            }
+        }
+    };
+
+    const handlePresetChange = (preset: string) => {
+        setActivePreset(preset);
+
+        if (Platform.OS === 'ios') {
+            let desiredLens: string | undefined;
+            if (preset === '0.5x') {
+                desiredLens = availableLenses.find(l => l.toLowerCase().includes('ultra'));
+            } else if (preset === '1x') {
+                desiredLens = availableLenses.find(l => (l.toLowerCase().includes('geniş') || l.toLowerCase().includes('wide') || l.toLowerCase().includes('ana')) && !l.toLowerCase().includes('ultra'));
+            } else if (preset === '2x') {
+                // Try telephoto first, fallback to wide
+                desiredLens = availableLenses.find(l => l.toLowerCase().includes('tele')) || availableLenses.find(l => (l.toLowerCase().includes('geniş') || l.toLowerCase().includes('wide')) && !l.toLowerCase().includes('ultra'));
+            }
+
+            if (desiredLens) {
+                console.log('[DEBUG] Switching physical lens to:', desiredLens);
+                setActiveLensName(desiredLens);
+                // Reset optical zoom multiplier when we switch lenses
+                setZoom(preset === '2x' && !desiredLens.toLowerCase().includes('tele') ? 0.05 : 0);
+                setBaseZoom(preset === '2x' && !desiredLens.toLowerCase().includes('tele') ? 0.05 : 0);
+            } else {
+                // Fallback to digital zoom if specific lens string not found
+                let z = 0;
+                if (preset === '1x') z = 0.02;
+                if (preset === '2x') z = 0.05;
+                setZoom(z);
+                setBaseZoom(z);
+            }
+        } else {
+            // Android digital zoom scale
+            let z = 0;
+            if (preset === '1x') z = 0.02;
+            if (preset === '2x') z = 0.05;
+            setZoom(z);
+            setBaseZoom(z);
+        }
+    };
 
     const onPinchEvent = (event: any) => {
         const scale = event.nativeEvent.scale;
@@ -224,12 +279,12 @@ export default function CameraScreen({ navigation }: any) {
                 >
                     <View style={{ flex: 1 }}>
                         <CameraView
-                            key={activeLensKey}
                             style={styles.camera}
                             facing="back"
                             ref={cameraRef}
                             zoom={zoom}
-                            selectedLens={LENS_PRESETS[activeLensKey].lens}
+                            selectedLens={activeLensName}
+                            onCameraReady={handleCameraReady}
                         />
 
                         {/* Project Name Overlay */}
@@ -244,18 +299,14 @@ export default function CameraScreen({ navigation }: any) {
                         <View style={styles.bottomBar}>
                             {/* Zoom Controls */}
                             <View style={styles.zoomControls}>
-                                {(Object.keys(LENS_PRESETS) as Array<keyof typeof LENS_PRESETS>).map((key) => (
+                                {PRESETS.map((preset) => (
                                     <TouchableOpacity
-                                        key={key}
-                                        style={[styles.zoomBtn, activeLensKey === key && styles.zoomBtnActive]}
-                                        onPress={() => {
-                                            setActiveLensKey(key);
-                                            setZoom(LENS_PRESETS[key].zoom);
-                                            setBaseZoom(LENS_PRESETS[key].zoom);
-                                        }}
+                                        key={preset}
+                                        style={[styles.zoomBtn, activePreset === preset && styles.zoomBtnActive]}
+                                        onPress={() => handlePresetChange(preset)}
                                     >
-                                        <Text style={[styles.zoomBtnText, activeLensKey === key && styles.zoomBtnTextActive]}>
-                                            {key}
+                                        <Text style={[styles.zoomBtnText, activePreset === preset && styles.zoomBtnTextActive]}>
+                                            {preset}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
