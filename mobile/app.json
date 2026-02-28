@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ymh-saha-mobile",
-    "slug": "ymh-saha-mobile",
+    "name": "ymhcam",
+    "slug": "ymhcam",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -29,14 +29,14 @@
           }
         }
       },
-      "bundleIdentifier": "com.anonymous.ymh-saha-mobile"
+      "bundleIdentifier": "com.ymh.cam"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.anonymous.ymhsahamobile"
+      "package": "com.ymh.cam"
     },
     "web": {
       "favicon": "./assets/favicon.png"
