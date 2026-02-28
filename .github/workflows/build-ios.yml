@@ -33,39 +33,26 @@ jobs:
       - name: 🔧 Expo Prebuild (iOS)
         run: npx expo prebuild --platform ios --clean
 
+      - name: 🔍 Detect iOS project name
+        id: detect
+        run: |
+          # Find the .xcworkspace to detect the project name
+          PROJ_NAME=$(ls -d ios/*.xcworkspace | head -1 | sed 's|ios/||;s|.xcworkspace||')
+          echo "name=$PROJ_NAME" >> $GITHUB_OUTPUT
+          echo "Detected iOS project: $PROJ_NAME"
+
       - name: 📲 Install CocoaPods
         run: |
           cd ios
           pod install
 
-      - name: 🔓 Force Allow HTTP (ATS Override)
-        run: |
-          PLIST="ios/ymhsahamobile/Info.plist"
-          echo "=== Before ATS fix ==="
-          /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$PLIST" || true
-          
-          # Delete existing ATS entry if exists, then recreate
-          /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$PLIST"
-          
-          # Add domain-specific exception for backend IP
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSExceptionDomains dict" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSExceptionDomains:34.173.32.137 dict" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSExceptionDomains:34.173.32.137:NSExceptionAllowsInsecureHTTPLoads bool true" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSExceptionDomains:34.173.32.137:NSIncludesSubdomains bool true" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSExceptionDomains:34.173.32.137:NSTemporaryExceptionAllowsInsecureHTTPLoads bool true" "$PLIST"
-          
-          echo "=== After ATS fix ==="
-          /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$PLIST"
-
       - name: 🏗️ Build iOS (Unsigned IPA for Device)
         run: |
+          PROJ="${{ steps.detect.outputs.name }}"
           cd ios
           xcodebuild clean build \
-            -workspace ymhsahamobile.xcworkspace \
-            -scheme ymhsahamobile \
+            -workspace "${PROJ}.xcworkspace" \
+            -scheme "${PROJ}" \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
@@ -76,13 +63,13 @@ jobs:
           
           echo "Packaging IPA..."
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/ymhsahamobile.app Payload/
-          zip -qr ymh-saha-ios.ipa Payload
+          cp -r "build/Build/Products/Release-iphoneos/${PROJ}.app" Payload/
+          zip -qr ymhcam-ios.ipa Payload
           rm -rf Payload
 
       - name: 📤 Upload Build
         uses: actions/upload-artifact@v4
         with:
-          name: ymh-saha-ios-build
-          path: mobile/ios/ymh-saha-ios.ipa
+          name: ymhcam-ios-build
+          path: mobile/ios/ymhcam-ios.ipa
           retention-days: 30
