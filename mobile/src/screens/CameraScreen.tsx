@@ -9,19 +9,19 @@ import { OCRService } from '../services/OCRService';
 import { PinchGestureHandler, State } from 'react-native-gesture-handler';
 import { useRoute } from '@react-navigation/native';
 
-const ZOOM_LEVELS = {
-    '0.5x': 0,
-    '1x': 0.05,
-    '2x': 0.1,
+const LENS_PRESETS = {
+    '0.5x': { zoom: 0, lens: 'builtInUltraWideCamera' },
+    '1x': { zoom: 0, lens: 'builtInWideAngleCamera' },
+    '2x': { zoom: Platform.OS === 'ios' ? 0.02 : 0.1, lens: 'builtInWideAngleCamera' },
 };
-const DEFAULT_ZOOM = ZOOM_LEVELS['1x'];
 
 export default function CameraScreen({ navigation }: any) {
     const [permission, requestPermission] = useCameraPermissions();
     const [photo, setPhoto] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [zoom, setZoom] = useState(DEFAULT_ZOOM);
-    const [baseZoom, setBaseZoom] = useState(DEFAULT_ZOOM);
+    const [activeLensKey, setActiveLensKey] = useState<keyof typeof LENS_PRESETS>('1x');
+    const [zoom, setZoom] = useState(LENS_PRESETS['1x'].zoom);
+    const [baseZoom, setBaseZoom] = useState(LENS_PRESETS['1x'].zoom);
     const [currentProject, setCurrentProject] = useState<{ id: string, name: string } | null>(null);
     const [userLocation, setUserLocation] = useState<{ latitude: number, longitude: number } | null>(null);
     const cameraRef = useRef<any>(null);
@@ -94,10 +94,7 @@ export default function CameraScreen({ navigation }: any) {
 
     const onPinchEvent = (event: any) => {
         const scale = event.nativeEvent.scale;
-        // Simple zoom logic: newZoom = baseZoom + (scale - 1) * factor
-        // Factor allows controlling speed
         let newZoom = baseZoom + (scale - 1) * 0.1;
-        // Clamp between 0 and 1
         newZoom = Math.min(Math.max(newZoom, 0), 1);
         setZoom(newZoom);
     };
@@ -230,6 +227,7 @@ export default function CameraScreen({ navigation }: any) {
                             facing="back"
                             ref={cameraRef}
                             zoom={zoom}
+                            selectedLens={LENS_PRESETS[activeLensKey].lens}
                         />
 
                         {/* Project Name Overlay */}
@@ -244,14 +242,18 @@ export default function CameraScreen({ navigation }: any) {
                         <View style={styles.bottomBar}>
                             {/* Zoom Controls */}
                             <View style={styles.zoomControls}>
-                                {Object.entries(ZOOM_LEVELS).map(([label, value]) => (
+                                {(Object.keys(LENS_PRESETS) as Array<keyof typeof LENS_PRESETS>).map((key) => (
                                     <TouchableOpacity
-                                        key={label}
-                                        style={[styles.zoomBtn, Math.abs(zoom - value) < 0.01 && styles.zoomBtnActive]}
-                                        onPress={() => setZoom(value)}
+                                        key={key}
+                                        style={[styles.zoomBtn, activeLensKey === key && styles.zoomBtnActive]}
+                                        onPress={() => {
+                                            setActiveLensKey(key);
+                                            setZoom(LENS_PRESETS[key].zoom);
+                                            setBaseZoom(LENS_PRESETS[key].zoom);
+                                        }}
                                     >
-                                        <Text style={[styles.zoomBtnText, Math.abs(zoom - value) < 0.01 && styles.zoomBtnTextActive]}>
-                                            {label}
+                                        <Text style={[styles.zoomBtnText, activeLensKey === key && styles.zoomBtnTextActive]}>
+                                            {key}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
