@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - 'mobile/**'
-  workflow_dispatch: # Manuel tetikleme
+  workflow_dispatch:
 
 jobs:
   build-android:
     name: 🤖 Build Android APK
     runs-on: ubuntu-latest
-    
+
     defaults:
       run:
         working-directory: ./mobile
@@ -38,38 +38,6 @@ jobs:
 
       - name: 🔧 Expo Prebuild (Android)
         run: npx expo prebuild --platform android --clean
-
-      - name: 🔑 Setup signing (debug key for testing)
-        run: |
-          # Use debug keystore for testing APK
-          # For production, replace with your own keystore via secrets
-          mkdir -p android/app
-          keytool -genkeypair \
-            -v \
-            -storetype PKCS12 \
-            -keystore android/app/release.keystore \
-            -alias ymh-saha \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=YMH Saha, OU=Dev, O=YMH, L=Izmir, ST=Izmir, C=TR" \
-            -storepass ymhsaha123 \
-            -keypass ymhsaha123
-
-      - name: 📝 Configure Gradle signing
-        run: |
-          cat >> android/gradle.properties << 'EOF'
-          MYAPP_RELEASE_STORE_FILE=release.keystore
-          MYAPP_RELEASE_KEY_ALIAS=ymh-saha
-          MYAPP_RELEASE_STORE_PASSWORD=ymhsaha123
-          MYAPP_RELEASE_KEY_PASSWORD=ymhsaha123
-          EOF
-
-          # Add signing config to build.gradle
-          sed -i 's/signingConfigs {/signingConfigs {\n        release {\n            storeFile file("release.keystore")\n            storePassword "ymhsaha123"\n            keyAlias "ymh-saha"\n            keyPassword "ymhsaha123"\n        }/' android/app/build.gradle
-
-          # Use release signing for release builds
-          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
 
       - name: 🏗️ Build APK
         run: |
