@@ -112,9 +112,14 @@ export default function ConfirmationScreen() {
             } else {
                 Alert.alert('Hata', 'Proje oluşturulamadı.');
             }
-        } catch (e) {
-            console.error(e);
-            Alert.alert('Hata', 'Bağlantı hatası.');
+        } catch (e: any) {
+            console.error('[DEBUG] createNewProject FULL ERROR:', JSON.stringify({
+                message: e?.message,
+                name: e?.name,
+                url: `${API_BASE_URL}/projects`,
+                stack: e?.stack?.substring(0, 200)
+            }));
+            Alert.alert('Hata', `Bağlantı hatası: ${e?.message || 'Bilinmeyen hata'}`);
         } finally {
             setIsCreatingProject(false);
         }

@@ -38,6 +38,21 @@ jobs:
           cd ios
           pod install
 
+      - name: 🔓 Force Allow HTTP (ATS Override)
+        run: |
+          PLIST="ios/ymhsahamobile/Info.plist"
+          echo "=== Before ATS fix ==="
+          /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$PLIST" || true
+          
+          # Delete existing ATS entry if exists, then recreate
+          /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$PLIST"
+          
+          echo "=== After ATS fix ==="
+          /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$PLIST"
+
       - name: 🏗️ Build iOS (Unsigned IPA for Device)
         run: |
           cd ios
