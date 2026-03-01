@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { MaterialType, Unit, DeliveryInput } from '../types';
+import { MaterialType, Unit, DeliveryInput, DEFAULT_MATERIALS } from '../types';
 import { DatabaseService } from '../services/Database';
 import { SyncService } from '../services/SyncService';
 import { API_BASE_URL } from '../config';
@@ -83,7 +83,14 @@ export default function ConfirmationScreen() {
     const { photoUri, ocrData, location, project } = route.params as any;
 
     // Form State
-    const [material, setMaterial] = useState<MaterialType>(ocrData?.material || MaterialType.KUM);
+    const initialMaterial = ocrData?.material && DEFAULT_MATERIALS.includes(ocrData.material as MaterialType)
+        ? ocrData.material as MaterialType
+        : (ocrData?.material ? MaterialType.DIGER : MaterialType.KUM);
+
+    const [material, setMaterial] = useState<MaterialType>(initialMaterial);
+    const [customMaterial, setCustomMaterial] = useState<string>(
+        (ocrData?.material && initialMaterial === MaterialType.DIGER) ? ocrData.material : ''
+    );
     const [quantity, setQuantity] = useState<string>(ocrData?.quantity?.toString() || '');
     const [unit, setUnit] = useState<Unit>(ocrData?.unit || Unit.TON);
     const [plate, setPlate] = useState<string>(ocrData?.plate || '');
@@ -191,7 +198,7 @@ export default function ConfirmationScreen() {
         try {
             const delivery: DeliveryInput = {
                 projectName: selectedProject.id,
-                materialType: material,
+                materialType: (material === MaterialType.DIGER && customMaterial.trim() ? customMaterial.trim().toUpperCase() : material) as MaterialType,
                 quantity: parseFloat(quantity.replace(',', '.')),
                 unit,
                 vehiclePlate: plate,
@@ -349,9 +356,23 @@ export default function ConfirmationScreen() {
                     <CustomPicker
                         label="Malzeme"
                         value={material}
-                        options={Object.values(MaterialType)}
+                        options={DEFAULT_MATERIALS}
                         onSelect={setMaterial}
                     />
+
+                    {material === MaterialType.DIGER && (
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.label}>Malzeme Adı</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={customMaterial}
+                                onChangeText={setCustomMaterial}
+                                placeholder="Farklı bir malzeme girin..."
+                                placeholderTextColor="#666"
+                                autoCapitalize="characters"
+                            />
+                        </View>
+                    )}
 
                     {/* Quantity Input */}
                     <View style={styles.inputContainer}>

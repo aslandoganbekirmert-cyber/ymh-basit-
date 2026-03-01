@@ -6,7 +6,21 @@ export enum MaterialType {
     FILLER = 'FILLER',
     PARKE = 'PARKE',
     BETON = 'BETON',
+    HAFRIYAT_TOPRAGI = 'HAFRİYAT TOPRAĞI',
+    CURUF = 'CÜRUF',
+    DIGER = 'DİĞER',
 }
+
+export const DEFAULT_MATERIALS = [
+    MaterialType.KUM,
+    MaterialType.BYPASS,
+    MaterialType.FILLER,
+    MaterialType.PARKE,
+    MaterialType.BETON,
+    MaterialType.HAFRIYAT_TOPRAGI,
+    MaterialType.CURUF,
+    MaterialType.DIGER,
+];
 
 export enum Unit {
     TON = 'TON',
