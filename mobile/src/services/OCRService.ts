@@ -16,7 +16,7 @@ interface OCRResult {
 }
 
 // Helper: fetch with timeout
-function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 30000): Promise<Response> {
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 60000): Promise<Response> {
     return new Promise((resolve, reject) => {
         const controller = new AbortController();
         const timer = setTimeout(() => {
@@ -58,7 +58,7 @@ export class OCRService {
                 method: 'POST',
                 body: formData,
                 // No Content-Type header — let fetch set it automatically
-            }, 30000);
+            }, 60000);
 
             if (!response.ok) {
                 console.warn('OCR API Error:', response.status);

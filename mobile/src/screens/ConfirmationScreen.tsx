@@ -99,6 +99,21 @@ export default function ConfirmationScreen() {
     const [note, setNote] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
 
+    // Extra material lines (for ADET type items like PARKE, BORDÜR)
+    const [extraItems, setExtraItems] = useState<{ material: string; quantity: string; unit: Unit }[]>([]);
+
+    const addExtraItem = () => {
+        setExtraItems(prev => [...prev, { material: '', quantity: '', unit: Unit.ADET }]);
+    };
+
+    const updateExtraItem = (idx: number, field: string, value: string) => {
+        setExtraItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+    };
+
+    const removeExtraItem = (idx: number) => {
+        setExtraItems(prev => prev.filter((_, i) => i !== idx));
+    };
+
     // Project State
     const [selectedProject, setSelectedProject] = useState<{ id: string, name: string } | null>(project || null);
     const [projects, setProjects] = useState<any[]>([]);
@@ -196,29 +211,29 @@ export default function ConfirmationScreen() {
 
         setIsSaving(true);
         try {
-            const delivery: DeliveryInput = {
-                projectName: selectedProject.id,
-                materialType: (material === MaterialType.DIGER && customMaterial.trim() ? customMaterial.trim().toUpperCase() : material) as MaterialType,
-                quantity: parseFloat(quantity.replace(',', '.')),
-                unit,
-                vehiclePlate: plate,
-                supplier,
-                receiptNo,
-                note,
-                photoLocalPath: photoUri,
-                ocrRawText: ocrData?.rawText,
-                ocrConfidence: ocrData?.confidence,
-                latitude: location?.latitude,
-                longitude: location?.longitude,
-            };
+            const mainMaterialType = (material === MaterialType.DIGER && customMaterial.trim()
+                ? customMaterial.trim().toUpperCase()
+                : material) as MaterialType;
 
-            // 1. Fast duplicate check (lightweight GET, ~50ms)
+            // Build all items to save: main + extra
+            const allItems = [
+                { materialType: mainMaterialType, quantity: parseFloat(quantity.replace(',', '.')), unit },
+                ...extraItems
+                    .filter(e => e.material.trim() && e.quantity.trim())
+                    .map(e => ({
+                        materialType: e.material.trim().toUpperCase() as MaterialType,
+                        quantity: parseFloat(e.quantity.replace(',', '.')),
+                        unit: e.unit,
+                    }))
+            ];
+
+            // 1. Fast duplicate check (only for main item)
             if (receiptNo && plate) {
                 try {
                     const checkRes = await fetchWithRetry(
                         `${API_BASE_URL}/transactions/check-duplicate?ticket=${encodeURIComponent(receiptNo)}&plate=${encodeURIComponent(plate)}`,
                         {},
-                        1, // sadece 1 deneme - offline ise atla
+                        1,
                         5000
                     );
                     if (checkRes.ok) {
@@ -230,24 +245,109 @@ export default function ConfirmationScreen() {
                         }
                     }
                 } catch (e) {
-                    // Offline — skip check, save locally
                     console.log('[Save] Backend unreachable, skipping duplicate check');
                 }
             }
 
-            // 2. Save to Local DB
-            await DatabaseService.addDelivery(delivery, selectedProject.id, 'USER_DEFAULT');
+            // 2. Save each item as a separate row
+            let savedCount = 0;
+            let failedCount = 0;
 
-            // 3. Background Sync
-            SyncService.syncBatch().catch(e => console.warn('Background sync failed', e));
+            for (let i = 0; i < allItems.length; i++) {
+                const item = allItems[i];
+                const isMain = i === 0;
+                try {
+                    const formData = new FormData();
+                    formData.append('project_name', selectedProject.name);
+                    formData.append('plate_number', plate);
+                    formData.append('material_type', item.materialType);
+                    formData.append('quantity', item.quantity.toString());
+                    formData.append('unit', item.unit);
+                    formData.append('type', 'IN');
+                    if (supplier) formData.append('supplier_name', supplier);
+                    // Only first item gets receipt no to avoid duplicate detection
+                    if (receiptNo && isMain) formData.append('ticket_number', receiptNo);
+                    if (note) formData.append('notes', note);
+                    // Photo only on main item
+                    if (photoUri && isMain) {
+                        formData.append('file', {
+                            uri: photoUri,
+                            name: `photo_${Date.now()}.jpg`,
+                            type: 'image/jpeg',
+                        } as any);
+                    }
 
-            // 4. Feedback & Reset
-            Alert.alert('Başarılı', `Kayıt ${selectedProject.name} projesine eklendi.`, [
-                {
-                    text: 'Tamam',
-                    onPress: () => navigation.navigate('Camera', { lastSelectedProject: selectedProject })
+                    const res = await fetch(`${API_BASE_URL}/transactions`, {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (res.ok || res.status === 409) {
+                        savedCount++;
+                        console.log(`[Save] ✅ Item ${i + 1}/${allItems.length} saved: ${item.materialType} ${item.quantity} ${item.unit}`);
+                    } else {
+                        const err = await res.text().catch(() => '');
+                        console.warn(`[Save] Item ${i + 1} failed: ${res.status}`, err);
+                        failedCount++;
+                    }
+                } catch (e: any) {
+                    console.error(`[Save] Item ${i + 1} network error:`, e?.message);
+                    failedCount++;
+                    // Save to local DB for retry
+                    const delivery: DeliveryInput = {
+                        projectName: selectedProject.id,
+                        materialType: item.materialType,
+                        quantity: item.quantity,
+                        unit: item.unit,
+                        vehiclePlate: plate,
+                        supplier,
+                        receiptNo: isMain ? receiptNo : undefined,
+                        note,
+                        photoLocalPath: photoUri,
+                        latitude: location?.latitude,
+                        longitude: location?.longitude,
+                    };
+                    await DatabaseService.addDelivery(delivery, selectedProject.id, 'USER_DEFAULT').catch(() => { });
                 }
-            ]);
+            }
+
+            if (savedCount > 0 && failedCount === 0) {
+                Alert.alert(
+                    'Başarılı ✅',
+                    allItems.length > 1
+                        ? `${savedCount} kalem ${selectedProject.name} projesine eklendi.`
+                        : `Kayıt ${selectedProject.name} projesine eklendi.`,
+                    [{ text: 'Tamam', onPress: () => navigation.navigate('Camera', { lastSelectedProject: selectedProject }) }]
+                );
+            } else if (savedCount > 0 && failedCount > 0) {
+                Alert.alert(
+                    'Kısmi Kayıt ⚠️',
+                    `${savedCount} kalem kaydedildi, ${failedCount} kalem gönderilemedi (offline kaydedildi).`,
+                    [{ text: 'Tamam', onPress: () => navigation.navigate('Camera', { lastSelectedProject: selectedProject }) }]
+                );
+            } else {
+                // All failed - save main item to local
+                const delivery: DeliveryInput = {
+                    projectName: selectedProject.id,
+                    materialType: mainMaterialType,
+                    quantity: parseFloat(quantity.replace(',', '.')),
+                    unit,
+                    vehiclePlate: plate,
+                    supplier,
+                    receiptNo,
+                    note,
+                    photoLocalPath: photoUri,
+                    latitude: location?.latitude,
+                    longitude: location?.longitude,
+                };
+                await DatabaseService.addDelivery(delivery, selectedProject.id, 'USER_DEFAULT').catch(() => { });
+                SyncService.syncBatch().catch(() => { });
+                Alert.alert(
+                    'Çevrimdışı Kayıt',
+                    `İnternet bağlantısı yok, kayıt yerel olarak kaydedildi.`,
+                    [{ text: 'Tamam', onPress: () => navigation.navigate('Camera', { lastSelectedProject: selectedProject }) }]
+                );
+            }
 
         } catch (error: any) {
             const msg = error?.message || 'Kayıt sırasında hata oluştu.';
@@ -394,6 +494,53 @@ export default function ConfirmationScreen() {
                         options={Object.values(Unit)}
                         onSelect={setUnit}
                     />
+
+                    {/* EXTRA ITEMS - Additional material lines */}
+                    {extraItems.map((item, idx) => (
+                        <View key={idx} style={{ backgroundColor: '#1a1a2e', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#FFD700' }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <Text style={{ color: '#FFD700', fontWeight: 'bold', fontSize: 13 }}>Ek Malzeme {idx + 1}</Text>
+                                <TouchableOpacity onPress={() => removeExtraItem(idx)}>
+                                    <Text style={{ color: '#ff4444', fontSize: 20, lineHeight: 20 }}>✕</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <TextInput
+                                style={[styles.input, { marginBottom: 8 }]}
+                                value={item.material}
+                                onChangeText={v => updateExtraItem(idx, 'material', v)}
+                                placeholder="Malzeme (ör: BORDÜR, PARKE)"
+                                placeholderTextColor="#555"
+                                autoCapitalize="characters"
+                            />
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <TextInput
+                                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                                    keyboardType="numeric"
+                                    value={item.quantity}
+                                    onChangeText={v => updateExtraItem(idx, 'quantity', v)}
+                                    placeholder="Miktar"
+                                    placeholderTextColor="#555"
+                                />
+                                <View style={{ width: 100 }}>
+                                    <CustomPicker
+                                        label=""
+                                        value={item.unit}
+                                        options={Object.values(Unit)}
+                                        onSelect={(v: Unit) => updateExtraItem(idx, 'unit', v)}
+                                    />
+                                </View>
+                            </View>
+                        </View>
+                    ))}
+
+                    {/* Add Extra Item Button */}
+                    <TouchableOpacity
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFD700', borderRadius: 8, padding: 10, marginBottom: 16, borderStyle: 'dashed' }}
+                        onPress={addExtraItem}
+                    >
+                        <Text style={{ color: '#FFD700', fontSize: 20, marginRight: 8 }}>+</Text>
+                        <Text style={{ color: '#FFD700', fontWeight: 'bold' }}>Ek Malzeme Ekle</Text>
+                    </TouchableOpacity>
 
                     {/* Plate Input */}
                     <View style={styles.inputContainer}>

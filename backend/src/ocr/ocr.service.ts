@@ -33,10 +33,10 @@ export class OCRService {
         const geminiKey = process.env.GEMINI_API_KEY;
         if (geminiKey) {
             try {
-                console.log('[OCRService] Attempting Gemini 2.0 Flash Vision AI...');
+                console.log('[OCRService] Attempting Gemini 2.5 Flash Vision AI...');
                 const genAI = new GoogleGenerativeAI(geminiKey);
-                // Updating to available model: gemini-2.0-flash
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                // Updating to available model: gemini-2.5-flash
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
                 const prompt = `Lütfen bu Türkçe şantiye/kantar/sevk irsaliyesi görüntüsünü incele. İçindeki el yazısı veya karmaşık verileri çok dikkatli oku.
 Senden SADECE aşağıdaki JSON formatında çıktı istiyorum. Başka hiçbir açıklama metni yazma:
@@ -46,13 +46,15 @@ Senden SADECE aşağıdaki JSON formatında çıktı istiyorum. Başka hiçbir a
   "supplierName": "Firma, Gönderen veya Tedarikçi Adı",
   "materialType": "Malzemenin Cinsi veya Adı (Örn: KUM, HAFRİYAT TOPRAĞI, PARKE, BETON vb)",
   "quantity": "Miktar sadece rakam (Örn: 28.3 veya 28300)",
-  "unit": "Birim (KG veya TON)"
+  "unit": "Birim (KG veya TON)",
+  "ticketNumber": "İrsaliye No veya Fiş No (Örn: 644646 veya 039464)"
 }
 
 Kurallar:
-1. Miktar ("quantity") kısmı kesinlikle net ağırlık olmalı ve noktalı sayı formatında olmalı.
-2. Plakada boşluk olmamalı.
-3. Bulamadığın alanları null veya boş string geçir.`;
+1. Miktar ("quantity") kısmı kesinlikle net ağırlık olmalı ve noktalı sayı formatında olmalı. Bulamazsan bile en mantıklı ağırlığı tahmine çalış.
+2. Plakada boşluk olmamalı. Şantiyemiz İzmir civarında olduğu için sıklıkla İzmir (35) veya Manisa (45) plakalı araçlar gelir. Eğer el yazısından dolayı ilk iki rakamı "75", "85", "95" gibi çok nadir illere benzetirsen, şekil benzerliğinden dolayı bunun aslında "35" veya "45" olma ihtimalini güçlü şekilde değerlendir ve düzelt!
+3. İrsaliye No veya Fiş No (ticketNumber), belgede genelde matbaa baskısı ile (örn kırmızı) yazılan "SIRA NO", "No:" veya "TARTIM NO" kısmıdır.
+4. Bulamadığın alanları null veya boş string geçir. Yanıtın KESİNLİKLE sadece ve sadece JSON olmalıdır.`;
 
                 const imagePart = {
                     inlineData: {
@@ -398,8 +400,9 @@ Kurallar:
     validateAndCorrect(ocrData: any): any {
         const corrected = { ...ocrData };
 
-        if (corrected.quantity) {
-            let qty = corrected.quantity.replace(/[^0-9\.,]/g, '');
+        if (corrected.quantity !== undefined && corrected.quantity !== null) {
+            let qtyStr = String(corrected.quantity);
+            let qty = qtyStr.replace(/[^0-9\.,]/g, '');
             if (qty.endsWith('.') || qty.endsWith(',')) qty = qty.slice(0, -1);
             if (!qty || qty === '.' || qty === ',') {
                 corrected.quantity = undefined;
@@ -407,10 +410,15 @@ Kurallar:
                 corrected.quantity = qty;
             }
 
-            if (corrected.unit === 'ADET' && corrected.quantity && corrected.quantity.includes('.')) {
-                const parts = corrected.quantity.split('.');
-                if (parts[1] && parts[1].length === 3) {
-                    corrected.quantity = corrected.quantity.replace('.', '');
+            if (corrected.unit === 'ADET' && corrected.quantity) {
+                const qtyStr = String(corrected.quantity);
+                if (qtyStr.includes('.')) {
+                    const parts = qtyStr.split('.');
+                    if (parts.length === 2 && parts[1] === '0') {
+                        corrected.quantity = parseInt(parts[0], 10);
+                    } else {
+                        corrected.quantity = parseInt(qtyStr.replace('.', ''), 10);
+                    }
                 }
             }
         }
