@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -28,6 +29,60 @@ export class OCRService {
     }
 
     async extractText(imageBuffer: Buffer): Promise<{ text: string; confidence: number; data: any }> {
+        // === 1. YENİ NESİL ÜCRETSİZ AI (GEMIN 1.5 FLASH) DENEMESİ ===
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (geminiKey) {
+            try {
+                console.log('[OCRService] Attempting Gemini 2.0 Flash Vision AI...');
+                const genAI = new GoogleGenerativeAI(geminiKey);
+                // Updating to available model: gemini-2.0-flash
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+                const prompt = `Lütfen bu Türkçe şantiye/kantar/sevk irsaliyesi görüntüsünü incele. İçindeki el yazısı veya karmaşık verileri çok dikkatli oku.
+Senden SADECE aşağıdaki JSON formatında çıktı istiyorum. Başka hiçbir açıklama metni yazma:
+
+{
+  "plateNumber": "Plaka (Örn: 35ABC123)",
+  "supplierName": "Firma, Gönderen veya Tedarikçi Adı",
+  "materialType": "Malzemenin Cinsi veya Adı (Örn: KUM, HAFRİYAT TOPRAĞI, PARKE, BETON vb)",
+  "quantity": "Miktar sadece rakam (Örn: 28.3 veya 28300)",
+  "unit": "Birim (KG veya TON)"
+}
+
+Kurallar:
+1. Miktar ("quantity") kısmı kesinlikle net ağırlık olmalı ve noktalı sayı formatında olmalı.
+2. Plakada boşluk olmamalı.
+3. Bulamadığın alanları null veya boş string geçir.`;
+
+                const imagePart = {
+                    inlineData: {
+                        data: imageBuffer.toString('base64'),
+                        mimeType: 'image/jpeg'
+                    }
+                };
+
+                const result = await model.generateContent([prompt, imagePart]);
+                let rawText = result.response.text();
+                console.log('[OCRService] Gemini Raw Response:', rawText);
+
+                rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                const parsedData = JSON.parse(rawText);
+
+                // Quick validation
+                const validatedData = this.validateAndCorrect(parsedData);
+                console.log('[OCRService] Gemini parsed successfully!');
+
+                return {
+                    text: 'Extracted by Gemini AI',
+                    confidence: 99,
+                    data: validatedData,
+                };
+            } catch (err) {
+                console.error('[OCRService] Gemini AI failed, falling back to Google Vision...', err.message);
+            }
+        }
+
+        // === 2. GOOGLE VISION API (ESKİ SİSTEM YEDEK) ===
         if (!this.client) {
             throw new Error('OCR not initialized - credentials file missing');
         }
