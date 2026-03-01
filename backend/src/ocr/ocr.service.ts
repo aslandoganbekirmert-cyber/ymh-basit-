@@ -185,6 +185,16 @@ export class OCRService {
             }
         }
 
+        // Priority 5: Global fallback simply searching for company type words anywhere
+        if (!data.supplierName) {
+            for (const line of lines) {
+                if (/(MADENC[İI]L[İI]K|İNŞAAT|INSAAT|LTD|A\.?Ş\.|A\.Ş|SAN\.|TİC\.|SANAY[İI])/i.test(line) && line.length > 5 && !/ERC\s*PROJE/i.test(line)) {
+                    data.supplierName = line.replace(/^\d+[\s\-\.]+/, '').trim();
+                    break;
+                }
+            }
+        }
+
         // === MALZEME TESPİTİ ===
         // e-İrsaliye: "Mal" column → value on next line (e.g. "BYPASS")
         // Kantar fişi: "Malzeme Adı" line
@@ -220,12 +230,15 @@ export class OCRService {
             }
         }
 
-        // Fallback: search for numbered material format "9- MUHTELIF MALZEME"
+        // Fallback: search globally for material keywords anywhere in the text
         if (!data.materialType) {
+            const materialRegex = /(HAFR[İI]YAT(\sTOPRA[ĞG]I)?|MUHTEL[İI]F|BYPASS|AGREGA|KUM|ÇAKIL|CAKIL|BETON|TOPRAK|KÖMÜR|KOMUR|MICIR|STABIL[İI]ZE|ASFALT|F[İI]LLER|CÜRUF)/i;
             for (const line of lines) {
-                const match = line.match(/^\d+[\s\-]+\s*(MUHTEL[İI]F|BYPASS|AGREGA|KUM|ÇAKIL|BETON|TOPRAK|KÖMÜR|KOMUR|MICIR|MICIR|STABILIZE|ASFALT|FİLLER|FILLER)/i);
+                const match = line.match(materialRegex);
                 if (match) {
-                    data.materialType = line.replace(/^\d+[\s\-\.]+/, '').trim();
+                    // Use the full matched string, not just the first capturing group,
+                    // to avoid issues with optional groups like (\sTOPRA[ĞG]I)?
+                    data.materialType = match[0].trim();
                     break;
                 }
             }
@@ -241,60 +254,71 @@ export class OCRService {
             data.ticketNumber = fisMatch[1];
         }
 
-        // === MİKTAR TESPİTİ ===
-        // Priority: NET > 1.Tartı > Miktar > generic
-        const quantityPatterns = [
-            // NET weight (most accurate in kantar fişi with BRÜT/DARA/NET)
-            /NET\s*[\.:]*\s*([0-9\.\,]+)\s*(?:Kg|KG|Ton|TON)/i,
-            // "29480.00 KG" format (standalone number with unit)
-            /\bNET\b[:\s]*\n?\s*([0-9\.\,]+)\s*\n?\s*(?:Kg|KG|Ton|TON)/i,
-            // 1.Tartı pattern
-            /(?:1\.\s*Tart[ıi]?|Tart[ıi]?)\s*[\.:]*\s*([0-9\.\,]+)\s*(?:Kg|KG|Ton|TON)/i,
-            // Miktar column (e-İrsaliye)
-            /Miktar\s*\n?\s*([0-9\.\,]+)\s*(?:Kg|KG|Ton|TON)/i,
-            /(?:MİKTAR|MIKTAR|QUANTITY|AGIRLIK)\s*[\.:]*\s*([0-9\.\,]+)\s*(TON|M3|M³|METRE|LİTRE|ADET|KG|Kg|kg)?/i,
-            /([0-9\.\,]+)\s+(Kg|KG|Ton|TON)/i,
-        ];
-        for (const pattern of quantityPatterns) {
-            const match = text.match(pattern);
-            if (match) {
-                let rawQty = match[1];
-                let unit = (match[2] || 'KG').toUpperCase();
+        // === MİKTAR TESPİTİ (YENİ AKILLI ALGORİTMA) ===
+        // Extract all valid weights in the document (KG or TON)
+        const allWeights: number[] = [];
+        const weightRegex = /\b([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+)\s*(KG|Kg|kg|TON|Ton|ton)\b/g;
 
-                if (rawQty === '.' || rawQty === ',') continue;
+        let match;
+        while ((match = weightRegex.exec(text)) !== null) {
+            let rawNum = match[1];
+            const originalUnit = match[2].toUpperCase();
 
-                // Handle Turkish number format: dot or comma as thousands separator
-                // "47.100" or "47,100" in Turkish = 47100 (not 47.1)
-                // If exactly 3 digits after separator → it's a thousands separator
-                if (rawQty.includes('.') && !rawQty.includes(',')) {
-                    const parts = rawQty.split('.');
-                    if (parts.length === 2 && parts[1].length === 3) {
-                        rawQty = rawQty.replace('.', '');
-                    }
-                } else if (rawQty.includes(',') && !rawQty.includes('.')) {
-                    const parts = rawQty.split(',');
-                    if (parts.length === 2 && parts[1].length === 3) {
-                        // Comma as thousands separator: 47,100 = 47100
-                        rawQty = rawQty.replace(',', '');
-                    } else {
-                        // Comma as decimal separator: 47,5 = 47.5
-                        rawQty = rawQty.replace(',', '.');
-                    }
-                }
+            // Clean up turkish number formatting
+            if (rawNum.includes('.') && !rawNum.includes(',')) {
+                if (rawNum.split('.')[1].length === 3) rawNum = rawNum.replace(/\./g, '');
+            } else if (rawNum.includes(',') && !rawNum.includes('.')) {
+                if (rawNum.split(',')[1].length === 3) rawNum = rawNum.replace(/,/g, '');
+                else rawNum = rawNum.replace(',', '.');
+            }
 
-                // Auto-convert KG to TON if value >= 1000
-                let numericQty = parseFloat(rawQty);
-                if (!isNaN(numericQty)) {
-                    if (unit === 'KG' && numericQty >= 1000) {
-                        numericQty = Math.round((numericQty / 1000) * 100) / 100; // Round to 2 decimals
-                        unit = 'TON';
-                    }
-                    rawQty = numericQty.toString();
-                }
+            let val = parseFloat(rawNum);
+            // Standartize to KG internally for math
+            if (originalUnit === 'TON') val = val * 1000;
 
-                data.quantity = rawQty;
-                data.unit = unit.replace('M³', 'M3').replace('METREKÜP', 'M3').replace('K8', 'KG');
-                break;
+            if (!isNaN(val) && val > 100 && !allWeights.includes(val)) {
+                allWeights.push(val);
+            }
+        }
+
+        // Sort weights ascending
+        allWeights.sort((a, b) => a - b);
+
+        // Logically deduce NET target
+        let targetKg = 0;
+        if (allWeights.length >= 3) {
+            // Most weigh bridge tickets have Dara, Net, Brüt.
+            // Brüt is highest, Dara is lowest, Net is usually the middle one!
+            // Let's verify if Max - Min matches the middle one roughly.
+            const min = allWeights[0];
+            const max = allWeights[allWeights.length - 1];
+            const diff = max - min;
+
+            // Find closest weight to the difference
+            const closestToDiff = allWeights.reduce((prev, curr) =>
+                Math.abs(curr - diff) < Math.abs(prev - diff) ? curr : prev
+            );
+
+            targetKg = closestToDiff;
+        } else if (allWeights.length > 0) {
+            // Priority regex fallback if we can't do math
+            const explicitNetMatch = text.match(/\bNET\b.*?([0-9][0-9\.,]*)\s*(KG|TON)/i);
+            if (explicitNetMatch) {
+                let n = parseFloat(explicitNetMatch[1].replace(/,/g, ''));
+                if (explicitNetMatch[2].toUpperCase() === 'TON') n *= 1000;
+                targetKg = n;
+            } else {
+                targetKg = allWeights[0]; // fallback
+            }
+        }
+
+        if (targetKg > 0) {
+            if (targetKg >= 1000) {
+                data.quantity = (Math.round((targetKg / 1000) * 100) / 100).toString();
+                data.unit = 'TON';
+            } else {
+                data.quantity = targetKg.toString();
+                data.unit = 'KG';
             }
         }
 
