@@ -58,7 +58,7 @@ export class SheetsService {
 
             // Add header row
             await this.appendRow(spreadsheetId, title, [
-                'Tarih', 'Saat', 'Proje', 'Plaka', 'Malzeme', 'Miktar', 'Birim', 'Tedarikçi', 'Fiş No', 'Notlar',
+                'Kayıt Tarihi', 'Kayıt Saati', 'Proje', 'Plaka', 'Malzeme', 'Miktar', 'Birim', 'Tedarikçi', 'Fiş No', 'İrsaliye Tarihi', 'Kayıt Tarihi (Tam)', 'Fotoğraf', 'Notlar',
             ]);
 
             return newSheetId;
@@ -92,8 +92,7 @@ export class SheetsService {
 
     private async tryAppend(spreadsheetId: string, sheetTitle: string, rowData: any[]) {
         const sheets = google.sheets({ version: 'v4', auth: this.client });
-        // range name must be quoted if creates issues, e.g. 'Sheet 1'!A:J
-        const range = `'${sheetTitle}'!A:J`;
+        const range = `'${sheetTitle}'!A:M`;
 
         await sheets.spreadsheets.values.append({
             spreadsheetId,

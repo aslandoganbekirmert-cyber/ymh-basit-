@@ -159,22 +159,37 @@ export class TransactionsService {
                 } catch { }
             }
 
-            const txDate = saved.transaction_date || saved.created_at || new Date();
-            const dateVal = txDate instanceof Date ? txDate : new Date(txDate);
-            const datePart = dateVal.toISOString().split('T')[0];
-            const timePart = dateVal.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            // Kayıt tarihi (sunucuya geldiği an)
+            const savedAt = saved.created_at ? new Date(saved.created_at) : new Date();
+            const kayitTarihi = savedAt.toLocaleDateString('tr-TR'); // ör: 02.03.2026
+            const kayitSaati = savedAt.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); // ör: 01:33
+
+            // İrsaliye tarihi (OCR'den - fişin üzerindeki tarih)
+            let irsaliyeTarihi = '';
+            try {
+                const ocrExtracted = saved.ocr_data?.extracted;
+                if (ocrExtracted?.receiptDate) {
+                    irsaliyeTarihi = ocrExtracted.receiptDate; // GG.MM.YYYY formatında
+                }
+            } catch { }
+
+            // Kayıt tam datetime (sıralama için)
+            const kayitTam = savedAt.toISOString().replace('T', ' ').substring(0, 16);
 
             const row = [
-                datePart,
-                timePart,
-                sheetTitle,
-                saved.plate_number || '',
-                saved.material_type || '',
-                saved.quantity || '',
-                saved.unit || '',
-                saved.supplier_name || '',
-                saved.ticket_number || '',
-                saved.notes || photoUrl || '',
+                kayitTarihi,          // A: Kayıt Tarihi (02.03.2026)
+                kayitSaati,           // B: Kayıt Saati (01:33)
+                sheetTitle,           // C: Proje
+                saved.plate_number || '',        // D: Plaka
+                saved.material_type || '',       // E: Malzeme
+                saved.quantity || '',            // F: Miktar
+                saved.unit || '',                // G: Birim
+                saved.supplier_name || '',       // H: Tedarikçi
+                saved.ticket_number || '',       // I: Fiş No
+                irsaliyeTarihi,                  // J: İrsaliye Tarihi (fişten okunan)
+                kayitTam,                        // K: Kayıt Tarihi (Tam) 
+                photoUrl || '',                  // L: Fotoğraf Linki
+                saved.notes || '',               // M: Notlar
             ];
 
             await this.sheetsService.appendRow(spreadsheetId, sheetTitle, row);

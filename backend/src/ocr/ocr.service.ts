@@ -47,14 +47,16 @@ Senden SADECE aşağıdaki JSON formatında çıktı istiyorum. Başka hiçbir a
   "materialType": "Malzemenin Cinsi veya Adı (Örn: KUM, HAFRİYAT TOPRAĞI, PARKE, BETON vb)",
   "quantity": "Miktar sadece rakam (Örn: 28.3 veya 28300)",
   "unit": "Birim (KG veya TON)",
-  "ticketNumber": "İrsaliye No veya Fiş No (Örn: 644646 veya 039464)"
+  "ticketNumber": "İrsaliye No veya Fiş No (Örn: 644646 veya 039464)",
+  "receiptDate": "İrsaliye üzerindeki tarih, GG.MM.YYYY formatında (Örn: 15.02.2026). Bulamazsan null."
 }
 
 Kurallar:
 1. Miktar ("quantity") kısmı kesinlikle net ağırlık olmalı ve noktalı sayı formatında olmalı. Bulamazsan bile en mantıklı ağırlığı tahmine çalış.
 2. Plakada boşluk olmamalı. Şantiyemiz İzmir civarında olduğu için sıklıkla İzmir (35) veya Manisa (45) plakalı araçlar gelir. Eğer el yazısından dolayı ilk iki rakamı "75", "85", "95" gibi çok nadir illere benzetirsen, şekil benzerliğinden dolayı bunun aslında "35" veya "45" olma ihtimalini güçlü şekilde değerlendir ve düzelt!
 3. İrsaliye No veya Fiş No (ticketNumber), belgede genelde matbaa baskısı ile (örn kırmızı) yazılan "SIRA NO", "No:" veya "TARTIM NO" kısmıdır.
-4. Bulamadığın alanları null veya boş string geçir. Yanıtın KESİNLİKLE sadece ve sadece JSON olmalıdır.`;
+4. receiptDate, fiş üzerinde "Tarih:", "İRD:", "T." gibi ibarelerle geçen tarihtir.
+5. Bulamadığın alanları null veya boş string geçir. Yanıtın KESİNLİKLE sadece ve sadece JSON olmalıdır.`;
 
                 const imagePart = {
                     inlineData: {
